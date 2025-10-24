@@ -231,6 +231,65 @@ export function useSaveWater(
     }
   }, [signer, instance]);
 
+  // 解密累计加密总量
+  const decryptTotalAmount = useCallback(async (): Promise<string> => {
+    if (!signer || !instance) {
+      return "需要连接钱包";
+    }
+    try {
+      const userAddress = await signer.getAddress();
+      const addr = await resolveSaveWaterAddress(provider as any);
+      const contract = new ethers.Contract(addr, SAVEWATER_ABI, signer);
+
+      const handle = await contract.getUserTotalAmount(userAddress);
+
+      const { publicKey, privateKey } = instance.generateKeypair();
+      const startTimestamp = Math.floor(Date.now() / 1000);
+      const durationDays = 365;
+      const eip712 = instance.createEIP712(
+        publicKey,
+        [addr],
+        startTimestamp,
+        durationDays
+      );
+      const signature = await signer.signTypedData(
+        eip712.domain,
+        { UserDecryptRequestVerification: eip712.types.UserDecryptRequestVerification },
+        eip712.message
+      );
+
+      const tryDecrypt = async () => {
+        const res = await instance.userDecrypt(
+          [{ handle, contractAddress: addr }],
+          privateKey,
+          publicKey,
+          signature,
+          [addr],
+          userAddress,
+          startTimestamp,
+          durationDays
+        );
+        const decryptedValue = res[handle];
+        return `${(Number(decryptedValue) / 1000).toFixed(1)} 升`;
+      };
+
+      try {
+        return await tryDecrypt();
+      } catch (e: any) {
+        const msg = String(e?.message || e);
+        if (msg.includes("not authorized to user decrypt handle")) {
+          const tx = await contract.grantAccessForTotal(userAddress);
+          await tx.wait();
+          return await tryDecrypt();
+        }
+        throw e;
+      }
+    } catch (error) {
+      console.error("解密累计失败:", error);
+      return "解密失败";
+    }
+  }, [signer, instance]);
+
   useEffect(() => {
     if (signer) {
       fetchStats();
@@ -246,7 +305,8 @@ export function useSaveWater(
     loading,
     fetchRecords,
     fetchStats,
-    decryptAmount
+    decryptAmount,
+    decryptTotalAmount
   };
 }
 

@@ -50,7 +50,7 @@ export default function Home() {
   const [message, setMessage] = useState("");
 
   // 使用 SaveWater hook 获取记录和统计
-  const { records, totalSaves, userCount, userStreak, loading, fetchRecords, fetchStats, decryptAmount } = useSaveWater(provider, signer, instance);
+  const { records, totalSaves, userCount, userStreak, loading, fetchRecords, fetchStats, decryptAmount, decryptTotalAmount } = useSaveWater(provider, signer, instance);
 
   useEffect(() => {
     const w = window as any;
@@ -348,6 +348,78 @@ export default function Home() {
                 ))}
               </div>
             </div>
+
+            {/* 解密我的数据 */}
+            {account && (
+              <div className="glass-card">
+                <h2 style={{ color: "white", marginBottom: "1.5rem", fontSize: "1.8rem", fontWeight: 800 }}>🔓 解密我的数据</h2>
+                <div style={{ display: "grid", gap: "1rem" }}>
+                  <button
+                    className="btn btn-primary"
+                    onClick={async () => {
+                      setMessage("请在钱包中签名以解密累计节水量...");
+                      try {
+                        const res = await decryptTotalAmount();
+                        setMessage(`✅ 累计节水量：${res}`);
+                      } catch (e: any) {
+                        setMessage(`❌ 解密失败：${e?.message || e}`);
+                      }
+                    }}
+                    style={{ width: "100%", fontSize: "1.05rem" }}
+                  >
+                    解密累计节水量
+                  </button>
+
+                  <div style={{ color: "rgba(255,255,255,0.9)", fontWeight: 600, marginTop: "0.5rem" }}>最近记录</div>
+                  <div className="table-container">
+                    <table className="table">
+                      <thead>
+                        <tr>
+                          <th>日期</th>
+                          <th>节水行为</th>
+                          <th>节水量</th>
+                          <th>操作</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {records.slice(0, 3).map((r) => (
+                          <tr key={`${r.timestamp}-${r.originalIndex}`}>
+                            <td>{r.date}</td>
+                            <td>{r.description}</td>
+                            <td>{decryptedMap[r.originalIndex] ?? "🔒 加密"}</td>
+                            <td>
+                              <button
+                                className="btn btn-primary"
+                                onClick={async () => {
+                                  if (decryptedMap[r.originalIndex]) return;
+                                  setDecryptingIndex(r.originalIndex);
+                                  setMessage("请在钱包中签名以解密...");
+                                  try {
+                                    const val = await decryptAmount(r.originalIndex);
+                                    if (val && !val.includes("失败") && !val.includes("需要连接钱包")) {
+                                      setDecryptedMap((m) => ({ ...m, [r.originalIndex]: val }));
+                                      setMessage(`✅ 解密成功：${val}`);
+                                    } else {
+                                      setMessage("❌ 解密失败");
+                                    }
+                                  } finally {
+                                    setDecryptingIndex(null);
+                                  }
+                                }}
+                                disabled={decryptingIndex !== null || Boolean(decryptedMap[r.originalIndex])}
+                                style={{ fontSize: "0.9rem" }}
+                              >
+                                {decryptedMap[r.originalIndex] ? "已解密" : (decryptingIndex === r.originalIndex ? "解密中..." : "解密")}
+                              </button>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
